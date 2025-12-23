@@ -1,0 +1,100 @@
+/* RBL Monitor WordPress Admin Styles */
+
+.wprbl-dashboard,
+.wprbl-report {
+    max-width: 1200px;
+}
+
+.wprbl-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin: 20px 0;
+}
+
+.wprbl-stat-card {
+    background: #fff;
+    padding: 20px;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.wprbl-stat-card h3 {
+    color: #666;
+    font-size: 14px;
+    margin: 0 0 10px 0;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.wprbl-stat-number {
+    font-size: 32px;
+    font-weight: bold;
+    color: #23282d;
+    margin: 0;
+}
+
+.wprbl-section {
+    margin: 30px 0;
+    padding: 20px;
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+}
+
+.wprbl-section h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.wprbl-form-inline {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.wprbl-form-inline input[type="text"],
+.wprbl-form-inline input[type="date"] {
+    flex: 1;
+    min-width: 200px;
+}
+
+.wprbl-blacklisted {
+    background: #fff5f5 !important;
+}
+
+.wprbl-blacklisted:hover {
+    background: #ffe5e5 !important;
+}
+
+.wprbl-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.wprbl-badge-success {
+    background: #d4edda;
+    color: #155724;
+}
+
+.wprbl-badge-danger {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .wprbl-form-inline {
+        flex-direction: column;
+    }
+    
+    .wprbl-form-inline input {
+        width: 100%;
+    }
+}
