@@ -62,6 +62,20 @@ Yes, if you enable email notifications in preferences. Reports can be sent daily
 
 The plugin checks against 26+ reliable RBLs from rblmon.com's monitored list, excluding RBLs known for false positives like UCEPROTECT.
 
+= How do I enable debug logging? =
+
+To enable detailed debug logging for troubleshooting RBL lookups, add this line to your `wp-config.php` file:
+
+`define('WPRBL_DEBUG', true);`
+
+Debug logs will be written to `wp-content/wprbl-debug.log` and include:
+* DNS lookup queries
+* DNS response details
+* Validation steps
+* Final listing status
+
+This is useful for diagnosing issues with specific RBLs or IP addresses. Remember to disable debug logging in production by removing or setting the constant to `false`.
+
 == Screenshots ==
 
 1. Dashboard showing IP addresses and status

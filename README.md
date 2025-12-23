@@ -85,6 +85,28 @@ The system monitors reliable RBLs from rblmon.com's list, excluding those known 
 - Session management with timeout
 - Input validation for IP addresses
 
+## Debug Logging
+
+To enable detailed debug logging for troubleshooting RBL lookups, add this line to your `wp-config.php` file:
+
+```php
+define('WPRBL_DEBUG', true);
+```
+
+Debug logs will be written to `wp-content/wprbl-debug.log` and include:
+- DNS lookup queries being performed
+- Raw DNS response details
+- Validation steps for Spamhaus and other RBLs
+- Final listing status and any errors
+
+This is particularly useful for:
+- Diagnosing issues with specific RBLs
+- Understanding why an IP is showing as listed/not listed
+- Troubleshooting DNS lookup problems
+- Verifying RBL response validation
+
+**Note:** Remember to disable debug logging in production by removing the constant or setting it to `false`, as it can generate large log files.
+
 ## Requirements
 
 - PHP 7.4 or higher

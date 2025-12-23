@@ -208,12 +208,17 @@ class WPRBL_Checker {
                 // Invalid response - likely a DNS error or misconfiguration
                 // Treat as not listed
                 $error_msg = 'Invalid RBL response: ' . ($response_ip ?? 'unknown');
-                if ($response_ip && !preg_match('/^127\.0\.0\.(\d+)$/', $response_ip)) {
-                    $error_msg .= ' (not in 127.0.0.x range)';
-                } elseif ($response_ip && strpos($dns_suffix, 'spamhaus.org') !== false) {
-                    if (preg_match('/^127\.0\.0\.(\d+)$/', $response_ip, $m)) {
+                if ($response_ip && strpos($dns_suffix, 'spamhaus.org') !== false) {
+                    // Spamhaus specific error codes
+                    if ($response_ip === '127.255.255.254') {
+                        $error_msg = 'Spamhaus query method error (127.255.255.254): Querying via public/open DNS resolver or unattributable reverse DNS. IP is not necessarily listed.';
+                    } elseif (!preg_match('/^127\.0\.0\.(\d+)$/', $response_ip)) {
+                        $error_msg .= ' (not in 127.0.0.x range - invalid response format)';
+                    } elseif (preg_match('/^127\.0\.0\.(\d+)$/', $response_ip, $m)) {
                         $error_msg .= ' (Spamhaus code ' . $m[1] . ' not in valid range [2,3,4,9,10,11])';
                     }
+                } elseif ($response_ip && !preg_match('/^127\.0\.0\.(\d+)$/', $response_ip)) {
+                    $error_msg .= ' (not in 127.0.0.x range)';
                 }
                 $result = [
                     'listed' => false, 
