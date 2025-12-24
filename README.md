@@ -1,13 +1,14 @@
-# RBL Monitor
+# RBL Watcher
 
-A comprehensive Real-time Blackhole List (RBL) monitoring system that allows you to monitor up to 250 IP addresses per account against multiple RBLs.
+A comprehensive Real-time Blackhole List (RBL) monitoring system that allows you to monitor up to 1000 IP addresses per account against multiple reliable RBLs.
 
 ## Features
 
-- **IP Management**: Add up to 250 IP addresses per account with optional labels
-- **RBL Monitoring**: Checks against 29+ RBLs (based on rblmon.com's monitored list)
+- **IP Management**: Add up to 1000 IP addresses per account with optional labels
+- **RBL Monitoring**: Checks against 24 reliable RBLs
 - **Rate Limiting**: Built-in rate limiting to respect RBL query policies
-- **Smart Filtering**: Automatically excludes paid RBLs
+- **Smart Filtering**: Automatically excludes paid RBLs and unreliable/slow RBLs
+- **Custom DNS Resolver**: Configurable DNS server support (Cloudflare, Google, local resolver, or system default)
 - **Reports**: 
   - Daily or weekly email reports
   - HTML and CSV report formats
@@ -23,18 +24,25 @@ A comprehensive Real-time Blackhole List (RBL) monitoring system that allows you
    mysql -u root -p < database.sql
    ```
 
-2. **Configuration**:
-   Edit `config.php` and update:
-   - Database credentials
-   - Email settings (SMTP)
-   - Application settings
+2. **Initialize RBLs**:
+   ```bash
+   php setup.php
+   ```
+   This script populates the database with the RBL list from `config.php`.
 
-3. **Web Server**:
+3. **Configuration**:
+   Edit `config.php` and update:
+   - Database credentials (DB_HOST, DB_NAME, DB_USER, DB_PASS)
+   - Email settings (SMTP) for reports
+   - DNS resolver settings (optional, see DNS Resolver Configuration below)
+   - Application settings (rate limiting, timeouts)
+
+4. **Web Server**:
    - Point your web server document root to this directory
    - Ensure PHP has DNS functions enabled
    - Recommended: PHP 7.4+ with PDO MySQL extension
 
-4. **Cron Jobs** (Optional but recommended):
+5. **Cron Jobs** (Optional but recommended):
    ```bash
    # Check IPs daily at 2 AM
    0 2 * * * /usr/bin/php /path/to/WPRBLWatcher/check_ips.php
@@ -46,23 +54,48 @@ A comprehensive Real-time Blackhole List (RBL) monitoring system that allows you
 ## Usage
 
 1. **Register/Login**: Create an account or login at `login.php`
-2. **Add IPs**: Add IP addresses to monitor (up to 250 per account)
+2. **Add IPs**: Add IP addresses to monitor (up to 1000 per account)
 3. **Run Checks**: Click "Run RBL Check Now" or wait for scheduled checks
 4. **View Reports**: View blacklisted IPs in the dashboard or download CSV reports
 5. **Configure Preferences**: Set report frequency (daily/weekly) and email notifications
 
 ## RBLs Monitored
 
-The system monitors reliable RBLs from rblmon.com's list, excluding those known for false positives:
+The system monitors 24 reliable, actively maintained RBLs. We only include RBLs that:
+- Respond reliably and quickly
+- Are actively maintained
+- Don't have excessive false positives
+- Are free to query
+
+**Included RBLs:**
 - Barracuda
 - SpamCop
-- SORBS (multiple lists)
-- SpamRats
-- Spamhaus (XBL, ZEN)
+- SORBS (multiple specialized lists: DNSBL, Spam, SMTP, SOCKS, Web, Zombie)
+- PSBL
+- SpamLab
+- SureSupport
+- Kundenserver Relays
+- Nether Relays
+- MSRBL (Spam, Virus)
+- SpamGuard
+- IMP (Spam, Worm)
+- Unsubscribe Score
 - DroneBL
-- And many more...
+- Tornevall
+- S5H
+- HostKarma
+- Anonmails
 
-**Note:** UCEPROTECT and other false-positive prone RBLs have been excluded for accuracy. Paid RBLs are automatically excluded. Rate limiting is applied per RBL to respect query policies.
+**Excluded RBLs:**
+- **Spamhaus** - Requires specific DNS configuration (local resolver with proper rDNS) that many users cannot easily set up
+- **SpamRats** - Unreliable DNS responses
+- **NJABL** - Extremely slow response times (4+ seconds)
+- **INPS** - Not responding reliably
+- **Blocklist.de** - Not working reliably with the plugin's DNS lookup implementation
+- **UCEPROTECT** and other false-positive prone RBLs
+- **Paid RBLs** - Automatically excluded
+
+**Note:** This project was inspired by rblmon.com's RBL monitoring approach. Rate limiting is applied per RBL to respect query policies. The RBL list is regularly updated to maintain reliability.
 
 ## File Structure
 
@@ -70,13 +103,16 @@ The system monitors reliable RBLs from rblmon.com's list, excluding those known 
 - `db.php` - Database connection class
 - `auth.php` - Authentication and session management
 - `rbl_checker.php` - RBL checking logic
+- `dns_lookup.php` - Custom DNS lookup class (standalone version)
 - `reports.php` - Report generation
 - `index.php` - Main dashboard
 - `login.php` - Login/registration page
 - `report.php` - Detailed report view
 - `check_ips.php` - Cron script for checking IPs
 - `send_reports.php` - Cron script for sending reports
+- `setup.php` - RBL initialization script (run after database setup)
 - `database.sql` - Database schema
+- `includes/class-wprbl-dns.php` - Custom DNS lookup class (WordPress plugin version)
 
 ## Security Notes
 
@@ -84,6 +120,49 @@ The system monitors reliable RBLs from rblmon.com's list, excluding those known 
 - SQL injection protection via PDO prepared statements
 - Session management with timeout
 - Input validation for IP addresses
+
+## DNS Resolver Configuration
+
+The system includes a custom DNS resolver implementation that allows you to query a specific DNS server instead of using the system default resolver. This is useful for:
+- **Testing different DNS providers** (Cloudflare 1.1.1.1, Google 8.8.8.8, etc.)
+- **Advanced DNS configurations** (local resolver with custom upstream servers)
+- **Network-specific requirements** (bypassing system DNS settings)
+
+### Available DNS Server Options:
+
+**Public DNS Servers:**
+- **Cloudflare DNS**: `1.1.1.1` (default, recommended for reliability)
+- **Google DNS**: `8.8.8.8`
+- **Quad9**: `9.9.9.9`
+- **OpenDNS**: `208.67.222.222`
+
+**Local Resolver:**
+- **Local resolver**: `127.0.0.1` or `localhost` (requires Unbound/dnsmasq setup - see SPAMHAUS_DNS_SETUP.md)
+
+**System Default:**
+- **System default**: `null` or empty string (uses server's default DNS resolver)
+
+### Quick Setup:
+
+**For Standalone Version:**
+```php
+// In config.php
+define('DNS_SERVER', '1.1.1.1'); // Cloudflare DNS (default)
+// define('DNS_SERVER', '8.8.8.8'); // Google DNS
+// define('DNS_SERVER', '127.0.0.1'); // Local resolver
+// define('DNS_SERVER', null); // System default
+```
+
+**For WordPress Plugin:**
+```php
+// In wp-config.php or wprbl-watcher.php
+define('WPRBL_DNS_SERVER', '1.1.1.1'); // Cloudflare DNS (default)
+// define('WPRBL_DNS_SERVER', '8.8.8.8'); // Google DNS
+// define('WPRBL_DNS_SERVER', '127.0.0.1'); // Local resolver
+// define('WPRBL_DNS_SERVER', null); // System default
+```
+
+**Note:** The system defaults to Cloudflare DNS (1.1.1.1) for optimal reliability. You can change this to any DNS server that works best for your environment. For Spamhaus compatibility, you may need to use a local resolver (see SPAMHAUS_DNS_SETUP.md).
 
 ## Debug Logging
 
@@ -109,10 +188,24 @@ This is particularly useful for:
 
 ## Requirements
 
-- PHP 7.4 or higher
-- MySQL 5.7+ or MariaDB 10.2+
-- PHP extensions: PDO, PDO_MySQL, DNS functions
-- Web server (Apache/Nginx)
+### Required:
+- **PHP 7.4 or higher**
+- **MySQL 5.7+ or MariaDB 10.2+**
+- **PHP extensions:**
+  - PDO
+  - PDO_MySQL
+  - DNS functions (`dns_get_record()`)
+  - Socket functions (for custom DNS resolver)
+- **Web server** (Apache/Nginx)
+- **Command-line PHP access** (for setup script and cron jobs)
+
+### Recommended:
+- **Cron job access** for automated checks and reports
+- **Local DNS resolver** (Unbound or dnsmasq) - Optional, only if you need custom DNS configuration
+
+### Optional:
+- **SMTP server** or mail service for email reports
+- **HTTPS/SSL certificate** for secure access in production
 
 ## License
 

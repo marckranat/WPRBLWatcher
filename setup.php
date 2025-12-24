@@ -9,7 +9,7 @@ require_once 'db.php';
 $db = Database::getInstance()->getConnection();
 global $RBL_LIST;
 
-echo "RBL Monitor Setup\n";
+echo "RBL Watcher Setup\n";
 echo "=================\n\n";
 
 // Check if RBLs already exist

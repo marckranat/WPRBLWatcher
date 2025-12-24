@@ -16,23 +16,16 @@ class WPRBL_Admin {
         add_action('wp_ajax_wprbl_delete_ip', [$this, 'ajax_delete_ip']);
         add_action('wp_ajax_wprbl_run_check', [$this, 'ajax_run_check']);
         add_action('wp_ajax_wprbl_update_preferences', [$this, 'ajax_update_preferences']);
+        add_action('wp_ajax_wprbl_get_ip_rbls', [$this, 'ajax_get_ip_rbls']);
     }
     
     public function add_admin_menu() {
         add_management_page(
-            'RBL Monitor',
-            'RBL Monitor',
+            'RBL Watcher',
+            'RBL Watcher',
             'read',
             'wprbl-monitor',
             [$this, 'render_dashboard']
-        );
-        
-        add_management_page(
-            'RBL Report',
-            'RBL Report',
-            'read',
-            'wprbl-report',
-            [$this, 'render_report']
         );
     }
     
@@ -42,6 +35,8 @@ class WPRBL_Admin {
         }
         
         wp_enqueue_style('wprbl-style', WPRBL_PLUGIN_URL . 'assets/style.css', [], WPRBL_VERSION);
+        wp_enqueue_script('jquery');
+        wp_localize_script('jquery', 'ajaxurl', admin_url('admin-ajax.php'));
     }
     
     public function render_dashboard() {
@@ -71,12 +66,38 @@ class WPRBL_Admin {
         ", $user_id), ARRAY_A);
         
         if (!$prefs) {
-            $prefs = ['report_frequency' => 'daily', 'email_notifications' => 1, 'report_day' => null];
+            // Get default domain for from_email
+            $site_url = site_url();
+            $domain = parse_url($site_url, PHP_URL_HOST);
+            $default_email = 'rbl@' . ($domain ? $domain : 'example.com');
+            
+            $prefs = [
+                'report_frequency' => 'daily', 
+                'email_notifications' => 1, 
+                'report_day' => null,
+                'from_email' => $default_email
+            ];
+        } elseif (empty($prefs['from_email'])) {
+            // Set default if not set
+            $site_url = site_url();
+            $domain = parse_url($site_url, PHP_URL_HOST);
+            $prefs['from_email'] = 'rbl@' . ($domain ? $domain : 'example.com');
         }
         
         // Get blacklisted IPs
         $reports = new WPRBL_Reports();
         $blacklisted_ips = $reports->get_blacklisted_ips($user_id);
+        
+        // Get IPs that have been checked (to distinguish from unchecked IPs)
+        $table_results = $wpdb->prefix . 'wprbl_check_results';
+        $checked_ip_ids = $wpdb->get_col($wpdb->prepare("
+            SELECT DISTINCT ip_address_id 
+            FROM $table_results 
+            WHERE ip_address_id IN (
+                SELECT id FROM $table_ips WHERE user_id = %d
+            )
+        ", $user_id));
+        $checked_ip_ids = array_flip($checked_ip_ids); // Convert to hash for faster lookup
         
         // Show debug notice if logging is enabled
         if (defined('WPRBL_DEBUG') && WPRBL_DEBUG) {
@@ -88,27 +109,6 @@ class WPRBL_Admin {
         }
         
         include WPRBL_PLUGIN_DIR . 'templates/dashboard.php';
-    }
-    
-    public function render_report() {
-        global $wpdb;
-        $user_id = get_current_user_id();
-        $reports = new WPRBL_Reports();
-        
-        $start_date = isset($_GET['start']) ? sanitize_text_field($_GET['start']) : date('Y-m-d', strtotime('-7 days'));
-        $end_date = isset($_GET['end']) ? sanitize_text_field($_GET['end']) : date('Y-m-d');
-        $format = isset($_GET['format']) ? sanitize_text_field($_GET['format']) : 'html';
-        
-        if ($format === 'csv') {
-            header('Content-Type: text/csv');
-            header('Content-Disposition: attachment; filename="rbl_report_' . date('Y-m-d') . '.csv"');
-            echo $reports->generate_csv_report($user_id, $start_date . ' 00:00:00', $end_date . ' 23:59:59');
-            exit;
-        }
-        
-        $blacklisted_ips = $reports->get_blacklisted_ips($user_id, $start_date . ' 00:00:00', $end_date . ' 23:59:59');
-        
-        include WPRBL_PLUGIN_DIR . 'templates/report.php';
     }
     
     private function handle_form_submission() {
@@ -124,11 +124,17 @@ class WPRBL_Admin {
             case 'delete_ip':
                 $this->delete_ip($user_id);
                 break;
+            case 'delete_ips_bulk':
+                $this->delete_ips_bulk($user_id);
+                break;
             case 'run_check':
                 $this->run_check($user_id);
                 break;
             case 'update_preferences':
                 $this->update_preferences($user_id);
+                break;
+            case 'sync_rbls':
+                $this->sync_rbls();
                 break;
         }
     }
@@ -257,6 +263,49 @@ class WPRBL_Admin {
         add_settings_error('wprbl', 'success', 'IP address removed.', 'updated');
     }
     
+    private function delete_ips_bulk($user_id) {
+        global $wpdb;
+        $table_ips = $wpdb->prefix . 'wprbl_ip_addresses';
+        
+        $ip_ids = isset($_POST['ip_ids']) ? array_map('intval', $_POST['ip_ids']) : [];
+        
+        if (empty($ip_ids)) {
+            add_settings_error('wprbl', 'no_selection', 'No IP addresses selected.', 'error');
+            return;
+        }
+        
+        // Sanitize and validate IP IDs
+        $ip_ids = array_filter($ip_ids, function($id) {
+            return $id > 0;
+        });
+        
+        if (empty($ip_ids)) {
+            add_settings_error('wprbl', 'invalid_ids', 'Invalid IP address IDs.', 'error');
+            return;
+        }
+        
+        // Use a safer approach: delete one by one to ensure proper security
+        $deleted = 0;
+        foreach ($ip_ids as $ip_id) {
+            $result = $wpdb->delete(
+                $table_ips,
+                ['id' => $ip_id, 'user_id' => $user_id],
+                ['%d', '%d']
+            );
+            if ($result !== false) {
+                $deleted += $result;
+            }
+        }
+        
+        if ($deleted === 0) {
+            add_settings_error('wprbl', 'no_deletes', 'No IP addresses were deleted. They may not exist or belong to another user.', 'error');
+        } else {
+            add_settings_error('wprbl', 'success', 
+                $deleted . ' IP address(es) removed.', 
+                'updated');
+        }
+    }
+    
     private function run_check($user_id) {
         $checker = new WPRBL_Checker();
         $result = $checker->check_user_ips($user_id);
@@ -272,6 +321,20 @@ class WPRBL_Admin {
         $frequency = sanitize_text_field($_POST['report_frequency'] ?? 'daily');
         $report_day = isset($_POST['report_day']) ? intval($_POST['report_day']) : null;
         $email_notifications = isset($_POST['email_notifications']) ? 1 : 0;
+        $from_email = sanitize_email($_POST['from_email'] ?? '');
+        
+        // Validate email
+        if (!empty($from_email) && !is_email($from_email)) {
+            add_settings_error('wprbl', 'invalid_email', 'Invalid email address format.', 'error');
+            return;
+        }
+        
+        // Set default if empty
+        if (empty($from_email)) {
+            $site_url = site_url();
+            $domain = parse_url($site_url, PHP_URL_HOST);
+            $from_email = 'rbl@' . ($domain ? $domain : 'example.com');
+        }
         
         $wpdb->replace(
             $table_prefs,
@@ -279,9 +342,10 @@ class WPRBL_Admin {
                 'user_id' => $user_id,
                 'report_frequency' => $frequency,
                 'report_day' => $report_day,
-                'email_notifications' => $email_notifications
+                'email_notifications' => $email_notifications,
+                'from_email' => $from_email
             ],
-            ['%d', '%s', '%d', '%d']
+            ['%d', '%s', '%d', '%d', '%s']
         );
         
         add_settings_error('wprbl', 'success', 'Preferences updated.', 'updated');
@@ -309,6 +373,60 @@ class WPRBL_Admin {
         check_ajax_referer('wprbl_nonce');
         $this->update_preferences(get_current_user_id());
         wp_send_json_success();
+    }
+    
+    public function ajax_get_ip_rbls() {
+        check_ajax_referer('wprbl_nonce');
+        global $wpdb;
+        $user_id = get_current_user_id();
+        $ip_id = intval($_POST['ip_id'] ?? 0);
+        
+        if ($ip_id <= 0) {
+            wp_send_json_error(['message' => 'Invalid IP ID']);
+            return;
+        }
+        
+        // Verify IP belongs to user
+        $table_ips = $wpdb->prefix . 'wprbl_ip_addresses';
+        $ip = $wpdb->get_row($wpdb->prepare("
+            SELECT id, ip_address 
+            FROM $table_ips 
+            WHERE id = %d AND user_id = %d
+        ", $ip_id, $user_id), ARRAY_A);
+        
+        if (!$ip) {
+            wp_send_json_error(['message' => 'IP not found']);
+            return;
+        }
+        
+        // Get RBLs that listed this IP
+        $table_results = $wpdb->prefix . 'wprbl_check_results';
+        $table_rbls = $wpdb->prefix . 'wprbl_rbls';
+        
+        $rbls = $wpdb->get_results($wpdb->prepare("
+            SELECT 
+                r.name,
+                r.dns_suffix,
+                rcr.response_text,
+                rcr.checked_at
+            FROM $table_results rcr
+            INNER JOIN $table_rbls r ON rcr.rbl_id = r.id
+            WHERE rcr.ip_address_id = %d 
+                AND rcr.is_listed = 1
+            ORDER BY r.name ASC
+        ", $ip_id), ARRAY_A);
+        
+        wp_send_json_success([
+            'ip_address' => $ip['ip_address'],
+            'rbls' => $rbls
+        ]);
+    }
+    
+    private function sync_rbls() {
+        WPRBL_Config::initialize_rbls();
+        add_settings_error('wprbl', 'rbls_synced', 
+            'RBL list has been synchronized with the configuration.', 
+            'success');
     }
 }
 

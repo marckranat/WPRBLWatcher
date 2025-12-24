@@ -57,7 +57,7 @@ class WPRBL_Reports {
             return "<p>No blacklisted IPs found for the selected period.</p>";
         }
         
-        $html = "<h2>RBL Monitor Report</h2>";
+        $html = "<h2>RBL Watcher Report</h2>";
         $html .= "<p>Report generated: " . current_time('mysql') . "</p>";
         $html .= "<p>Total blacklisted IPs: " . count($blacklisted_ips) . "</p>";
         $html .= "<table border='1' cellpadding='5' cellspacing='0' style='border-collapse: collapse; width: 100%;'>";
@@ -121,9 +121,22 @@ class WPRBL_Reports {
         }
         
         $html = $this->generate_html_report($user_id, $start_date, $end_date);
-        $subject = "RBL Monitor " . ucfirst($report_type) . " Report - " . date('Y-m-d');
+        $subject = "RBL Watcher " . ucfirst($report_type) . " Report - " . date('Y-m-d');
         
-        $sent = wp_mail($email, $subject, $html, ['Content-Type: text/html; charset=UTF-8']);
+        // Get from_email from preferences
+        $from_email = !empty($prefs['from_email']) ? $prefs['from_email'] : null;
+        if (empty($from_email)) {
+            $site_url = site_url();
+            $domain = parse_url($site_url, PHP_URL_HOST);
+            $from_email = 'rbl@' . ($domain ? $domain : 'example.com');
+        }
+        
+        $headers = ['Content-Type: text/html; charset=UTF-8'];
+        if ($from_email) {
+            $headers[] = 'From: ' . $from_email;
+        }
+        
+        $sent = wp_mail($email, $subject, $html, $headers);
         
         if ($sent) {
             $this->update_last_report_sent($user_id);
@@ -141,13 +154,35 @@ class WPRBL_Reports {
         ", $user_id), ARRAY_A);
         
         if (!$prefs) {
+            // Get default domain for from_email
+            $site_url = site_url();
+            $domain = parse_url($site_url, PHP_URL_HOST);
+            $default_email = 'rbl@' . ($domain ? $domain : 'example.com');
+            
             // Create default preferences
             $wpdb->insert(
                 $table_prefs,
-                ['user_id' => $user_id, 'report_frequency' => 'daily', 'email_notifications' => 1],
-                ['%d', '%s', '%d']
+                [
+                    'user_id' => $user_id, 
+                    'report_frequency' => 'daily', 
+                    'email_notifications' => 1,
+                    'from_email' => $default_email
+                ],
+                ['%d', '%s', '%d', '%s']
             );
-            return ['report_frequency' => 'daily', 'email_notifications' => 1, 'report_day' => null];
+            return [
+                'report_frequency' => 'daily', 
+                'email_notifications' => 1, 
+                'report_day' => null,
+                'from_email' => $default_email
+            ];
+        }
+        
+        // Set default from_email if not set
+        if (empty($prefs['from_email'])) {
+            $site_url = site_url();
+            $domain = parse_url($site_url, PHP_URL_HOST);
+            $prefs['from_email'] = 'rbl@' . ($domain ? $domain : 'example.com');
         }
         
         return $prefs;

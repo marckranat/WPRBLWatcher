@@ -1,4 +1,4 @@
-/* RBL Monitor WordPress Admin Styles */
+/* RBL Watcher WordPress Admin Styles */
 
 .wprbl-dashboard,
 .wprbl-report {
@@ -86,6 +86,46 @@
 .wprbl-badge-danger {
     background: #f8d7da;
     color: #721c24;
+}
+
+.wprbl-expandable {
+    user-select: none;
+}
+
+.wprbl-expandable:hover {
+    opacity: 0.8;
+}
+
+.wprbl-expandable .dashicons {
+    margin-left: 4px;
+    transition: transform 0.2s;
+}
+
+.wprbl-rbl-details {
+    background-color: #fff3cd !important;
+}
+
+.wprbl-rbl-details td {
+    border-left: 4px solid #ffc107;
+    padding: 15px 20px !important;
+}
+
+.wprbl-rbl-details ul {
+    margin: 8px 0 0 0;
+    padding-left: 20px;
+}
+
+.wprbl-rbl-details li {
+    margin: 8px 0;
+    line-height: 1.6;
+}
+
+.wprbl-rbl-details code {
+    background: #f0f0f0;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    color: #d63384;
 }
 
 /* Responsive */

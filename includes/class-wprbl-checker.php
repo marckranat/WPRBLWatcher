@@ -29,6 +29,60 @@ class WPRBL_Checker {
     }
     
     /**
+     * Get server diagnostic information
+     */
+    private function get_server_diagnostics() {
+        $diagnostics = [];
+        
+        // Get DNS server being used
+        $dns_server = defined('WPRBL_DNS_SERVER') && !empty(WPRBL_DNS_SERVER) ? WPRBL_DNS_SERVER : 'system default';
+        $diagnostics[] = "DNS Server: $dns_server";
+        
+        // Try to get server's public IP
+        $server_ip = null;
+        $context = stream_context_create([
+            'http' => [
+                'timeout' => 2,
+                'method' => 'GET'
+            ]
+        ]);
+        $ip_services = ['https://api.ipify.org', 'https://ifconfig.me/ip', 'https://icanhazip.com'];
+        foreach ($ip_services as $service) {
+            $ip = @file_get_contents($service, false, $context);
+            if ($ip && filter_var(trim($ip), FILTER_VALIDATE_IP)) {
+                $server_ip = trim($ip);
+                break;
+            }
+        }
+        if ($server_ip) {
+            $diagnostics[] = "Server Public IP: $server_ip";
+            
+            // Try to get reverse DNS
+            $rdns = @gethostbyaddr($server_ip);
+            if ($rdns && $rdns !== $server_ip) {
+                $diagnostics[] = "Reverse DNS: $rdns";
+                
+                // Check if rDNS looks generic/unattributable
+                $generic_patterns = ['ec2-', 'compute.amazonaws.com', 'amazonaws.com', 'cloud', 'hosting', 'server', 'ip-'];
+                $is_generic = false;
+                foreach ($generic_patterns as $pattern) {
+                    if (stripos($rdns, $pattern) !== false) {
+                        $is_generic = true;
+                        break;
+                    }
+                }
+                if ($is_generic) {
+                    $diagnostics[] = "WARNING: Reverse DNS appears generic/unattributable";
+                }
+            } else {
+                $diagnostics[] = "WARNING: No reverse DNS configured (PTR record missing)";
+            }
+        }
+        
+        return $diagnostics;
+    }
+    
+    /**
      * Log RBL check details for debugging
      */
     private function log_rbl_check($ip, $rbl_id, $dns_suffix, $lookup, $dns_result, $result) {
@@ -79,6 +133,18 @@ class WPRBL_Checker {
             $rbl_id,
             $lookup
         );
+        
+        // Add diagnostic information, especially for Spamhaus errors
+        if (isset($result['error']) && strpos($result['error'], '127.255.255.254') !== false) {
+            $diagnostics = $this->get_server_diagnostics();
+            if (!empty($diagnostics)) {
+                $log_entry .= "  Diagnostics:\n";
+                foreach ($diagnostics as $diag) {
+                    $log_entry .= "    - $diag\n";
+                }
+            }
+        }
+        
         $log_entry .= "  DNS Result: " . $dns_result_str . "\n";
         if (isset($result['validation_debug']) && is_array($result['validation_debug'])) {
             $log_entry .= "  Validation: " . implode(" | ", $result['validation_debug']) . "\n";
@@ -119,9 +185,18 @@ class WPRBL_Checker {
         
         $start_time = microtime(true);
         
-        // Perform DNS lookup - only check for A records (IPv4)
-        // RBLs typically return A records with 127.0.0.x addresses when listed
-        $dns_result = @dns_get_record($lookup, DNS_A);
+        // Perform DNS lookup - use custom DNS resolver if configured
+        // This allows queries to originate from server IP (via local resolver) instead of public DNS
+        $dns_server = defined('WPRBL_DNS_SERVER') && !empty(WPRBL_DNS_SERVER) ? WPRBL_DNS_SERVER : null;
+        
+        if (!empty($dns_server)) {
+            // Use custom DNS lookup class for local resolver
+            require_once WPRBL_PLUGIN_DIR . 'includes/class-wprbl-dns.php';
+            $dns_result = WPRBL_DNS::lookup_a($lookup, $dns_server, WPRBL_DNS_LOOKUP_TIMEOUT);
+        } else {
+            // Use system default DNS resolver
+            $dns_result = @dns_get_record($lookup, DNS_A);
+        }
         
         $elapsed = microtime(true) - $start_time;
         
@@ -130,19 +205,24 @@ class WPRBL_Checker {
         
         // Check for timeout
         if ($elapsed >= WPRBL_DNS_LOOKUP_TIMEOUT * 0.9) {
-            $result = ['listed' => false, 'error' => 'DNS lookup timeout', 'response' => null];
+            $result = ['listed' => false, 'error' => 'DNS lookup timeout (RBL may be slow or unresponsive)', 'response' => null];
             $this->log_rbl_check($ip, $rbl_id, $dns_suffix, $lookup, 'TIMEOUT', $result);
             return $result;
         }
         
         // Check if we got a valid A record result
         // $dns_result will be:
-        // - false: DNS error occurred
-        // - empty array []: No records found (IP is NOT listed)
+        // - false: DNS error occurred (timeout, connection error, or malformed response)
+        // - empty array []: No records found (IP is NOT listed) - includes NXDOMAIN responses
         // - array with elements: Records found (IP IS listed)
         if ($dns_result === false) {
-            // DNS error - treat as not listed but log the error
-            $result = ['listed' => false, 'error' => 'DNS lookup error', 'response' => null];
+            // DNS error - could be timeout, connection issue, or RBL unresponsive
+            // For RBLs that are known to be slow or unreliable, this is expected
+            $error_msg = 'DNS lookup error';
+            if ($elapsed > 3) {
+                $error_msg .= ' (RBL may be slow or unresponsive)';
+            }
+            $result = ['listed' => false, 'error' => $error_msg, 'response' => null];
             $this->log_rbl_check($ip, $rbl_id, $dns_suffix, $lookup, false, $result);
             return $result;
         }
@@ -181,12 +261,13 @@ class WPRBL_Checker {
                             $validation_debug[] = "Invalid Spamhaus code: $last_octet (not in [2,3,4,9,10,11])";
                         }
                     } else {
-                        // For other RBLs, accept any 127.0.0.x response (1-255)
-                        if ($last_octet >= 1 && $last_octet <= 255) {
+                        // For other RBLs, accept any 127.0.0.x response (0-255)
+                        // Some RBLs use 127.0.0.0 as a valid response code
+                        if ($last_octet >= 0 && $last_octet <= 255) {
                             $is_valid_response = true;
                             $validation_debug[] = "Valid non-Spamhaus code: $last_octet";
                         } else {
-                            $validation_debug[] = "Invalid code: $last_octet (not in 1-255)";
+                            $validation_debug[] = "Invalid code: $last_octet (not in 0-255)";
                         }
                     }
                 } else {
@@ -211,7 +292,13 @@ class WPRBL_Checker {
                 if ($response_ip && strpos($dns_suffix, 'spamhaus.org') !== false) {
                     // Spamhaus specific error codes
                     if ($response_ip === '127.255.255.254') {
-                        $error_msg = 'Spamhaus query method error (127.255.255.254): Querying via public/open DNS resolver or unattributable reverse DNS. IP is not necessarily listed.';
+                        $dns_server_info = '';
+                        if (defined('WPRBL_DNS_SERVER') && !empty(WPRBL_DNS_SERVER)) {
+                            $dns_server_info = " (using DNS server: " . WPRBL_DNS_SERVER . ")";
+                        }
+                        $error_msg = 'Spamhaus query method error (127.255.255.254): Querying via public/open DNS resolver or unattributable reverse DNS.' . $dns_server_info . ' ';
+                        $error_msg .= 'Your local DNS resolver must be configured to do recursive queries directly to authoritative DNS servers, NOT forward to public resolvers (8.8.8.8, 1.1.1.1, etc.). ';
+                        $error_msg .= 'See SPAMHAUS_DNS_SETUP.md for configuration instructions. IP is not necessarily listed.';
                     } elseif (!preg_match('/^127\.0\.0\.(\d+)$/', $response_ip)) {
                         $error_msg .= ' (not in 127.0.0.x range - invalid response format)';
                     } elseif (preg_match('/^127\.0\.0\.(\d+)$/', $response_ip, $m)) {

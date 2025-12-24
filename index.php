@@ -105,13 +105,13 @@ $blacklistedIPs = $reportGen->getBlacklistedIPs($userId);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RBL Monitor - Dashboard</title>
+    <title>RBL Watcher - Dashboard</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>RBL Monitor</h1>
+            <h1>RBL Watcher</h1>
             <div class="user-info">
                 <span>Welcome, <?php echo htmlspecialchars($auth->getUsername()); ?></span>
                 <a href="logout.php" class="btn btn-secondary">Logout</a>

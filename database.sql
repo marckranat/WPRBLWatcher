@@ -1,4 +1,4 @@
--- RBL Monitor Database Schema
+-- RBL Watcher Database Schema
 
 CREATE DATABASE IF NOT EXISTS rbl_monitor CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE rbl_monitor;
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
     INDEX idx_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- IP addresses table (250 per user limit)
+-- IP addresses table (1000 per user limit)
 CREATE TABLE IF NOT EXISTS ip_addresses (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,

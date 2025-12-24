@@ -72,10 +72,26 @@ class WPRBL_Database {
             report_frequency varchar(20) DEFAULT 'daily',
             report_day int DEFAULT NULL,
             email_notifications tinyint(1) DEFAULT 1,
+            from_email varchar(255) DEFAULT NULL,
             last_report_sent datetime DEFAULT NULL,
             PRIMARY KEY (id),
             UNIQUE KEY user_id (user_id)
         ) $charset_collate;";
+        
+        dbDelta($sql_prefs);
+        
+        // Add from_email column if it doesn't exist (for existing installations)
+        $column_exists = $wpdb->get_var($wpdb->prepare("
+            SELECT COUNT(*) 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = %s 
+            AND COLUMN_NAME = 'from_email'
+        ", $table_prefs));
+        
+        if ($column_exists == 0) {
+            $wpdb->query("ALTER TABLE $table_prefs ADD COLUMN from_email varchar(255) DEFAULT NULL AFTER email_notifications");
+        }
         
         // Check history table
         $table_history = $wpdb->prefix . 'wprbl_check_history';

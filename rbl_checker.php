@@ -95,9 +95,18 @@ class RBLChecker {
         $startTime = microtime(true);
         $result = null;
         
-        // Perform DNS lookup with timeout protection
-        // Use dns_get_record which provides better response details
-        $dnsResult = @dns_get_record($lookup, DNS_A + DNS_AAAA);
+        // Perform DNS lookup - use custom DNS resolver if configured
+        // This allows queries to originate from server IP (via local resolver) instead of public DNS
+        $dnsServer = defined('DNS_SERVER') && !empty(DNS_SERVER) ? DNS_SERVER : null;
+        
+        if (!empty($dnsServer)) {
+            // Use custom DNS lookup class for local resolver
+            require_once __DIR__ . '/dns_lookup.php';
+            $dnsResult = DNS_Lookup::lookup_a($lookup, $dnsServer, DNS_LOOKUP_TIMEOUT);
+        } else {
+            // Use system default DNS resolver
+            $dnsResult = @dns_get_record($lookup, DNS_A + DNS_AAAA);
+        }
         
         $elapsed = microtime(true) - $startTime;
         

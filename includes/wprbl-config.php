@@ -10,7 +10,8 @@ if (!defined('ABSPATH')) {
 class WPRBL_Config {
     
     /**
-     * Get RBL list - Based on rblmon.com monitored RBLs (excluding false positive prone RBLs)
+     * Get RBL list - Curated list of reliable, fast-responding RBLs
+     * Excludes unreliable/slow RBLs and those requiring complex setup
      */
     public static function get_rbl_list() {
         return [
@@ -18,7 +19,6 @@ class WPRBL_Config {
             ['name' => 'SpamCop', 'dns_suffix' => 'bl.spamcop.net', 'requires_paid' => false, 'rate_limit_ms' => 200],
             ['name' => 'SORBS DNSBL', 'dns_suffix' => 'dnsbl.sorbs.net', 'requires_paid' => false, 'rate_limit_ms' => 100],
             ['name' => 'SORBS Spam', 'dns_suffix' => 'spam.dnsbl.sorbs.net', 'requires_paid' => false, 'rate_limit_ms' => 100],
-            ['name' => 'SpamRats', 'dns_suffix' => 'spam.spamrats.com', 'requires_paid' => false, 'rate_limit_ms' => 100],
             ['name' => 'PSBL', 'dns_suffix' => 'psbl.surriel.com', 'requires_paid' => false, 'rate_limit_ms' => 100],
             ['name' => 'SpamLab', 'dns_suffix' => 'rbl.spamlab.com', 'requires_paid' => false, 'rate_limit_ms' => 100],
             ['name' => 'SureSupport', 'dns_suffix' => 'rbl.suresupport.com', 'requires_paid' => false, 'rate_limit_ms' => 100],
@@ -33,13 +33,12 @@ class WPRBL_Config {
             ['name' => 'MSRBL Virus', 'dns_suffix' => 'virus.rbl.msrbl.net', 'requires_paid' => false, 'rate_limit_ms' => 100],
             ['name' => 'SORBS Web', 'dns_suffix' => 'web.dnsbl.sorbs.net', 'requires_paid' => false, 'rate_limit_ms' => 100],
             ['name' => 'IMP Worm', 'dns_suffix' => 'wormrbl.imp.ch', 'requires_paid' => false, 'rate_limit_ms' => 100],
-            ['name' => 'Spamhaus XBL', 'dns_suffix' => 'xbl.spamhaus.org', 'requires_paid' => false, 'rate_limit_ms' => 200],
-            ['name' => 'Spamhaus ZEN', 'dns_suffix' => 'zen.spamhaus.org', 'requires_paid' => false, 'rate_limit_ms' => 200],
             ['name' => 'SORBS Zombie', 'dns_suffix' => 'zombie.dnsbl.sorbs.net', 'requires_paid' => false, 'rate_limit_ms' => 100],
             ['name' => 'DroneBL', 'dns_suffix' => 'dnsbl.dronebl.org', 'requires_paid' => false, 'rate_limit_ms' => 100],
-            ['name' => 'INPS', 'dns_suffix' => 'dnsbl.inps.de', 'requires_paid' => false, 'rate_limit_ms' => 100],
-            ['name' => 'NJABL', 'dns_suffix' => 'dnsbl.njabl.org', 'requires_paid' => false, 'rate_limit_ms' => 100],
             ['name' => 'Tornevall', 'dns_suffix' => 'dnsbl.tornevall.org', 'requires_paid' => false, 'rate_limit_ms' => 100],
+            ['name' => 'S5H', 'dns_suffix' => 'all.s5h.net', 'requires_paid' => false, 'rate_limit_ms' => 100],
+            ['name' => 'HostKarma', 'dns_suffix' => 'hostkarma.junkemailfilter.com', 'requires_paid' => false, 'rate_limit_ms' => 100],
+            ['name' => 'Anonmails', 'dns_suffix' => 'spam.dnsbl.anonmails.de', 'requires_paid' => false, 'rate_limit_ms' => 100],
         ];
     }
     
@@ -51,6 +50,20 @@ class WPRBL_Config {
         $table_name = $wpdb->prefix . 'wprbl_rbls';
         $rbl_list = self::get_rbl_list();
         
+        // Get list of DNS suffixes from config
+        $config_dns_suffixes = array_column($rbl_list, 'dns_suffix');
+        
+        // Disable RBLs that are no longer in the config
+        if (!empty($config_dns_suffixes)) {
+            $placeholders = implode(',', array_fill(0, count($config_dns_suffixes), '%s'));
+            $wpdb->query($wpdb->prepare("
+                UPDATE $table_name 
+                SET enabled = 0 
+                WHERE dns_suffix NOT IN ($placeholders)
+            ", $config_dns_suffixes));
+        }
+        
+        // Add or update RBLs from config
         foreach ($rbl_list as $rbl) {
             $wpdb->replace(
                 $table_name,

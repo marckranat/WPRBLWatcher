@@ -4,7 +4,7 @@ if (!defined('ABSPATH')) {
 }
 ?>
 <div class="wrap wprbl-report">
-    <h1>RBL Monitor - Report</h1>
+    <h1>RBL Watcher - Report</h1>
     
     <div class="wprbl-section">
         <h2>Report Filters</h2>

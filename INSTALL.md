@@ -43,8 +43,8 @@
 
 ## Features
 
-- ✅ Monitor up to 250 IPs per account
-- ✅ Check against 29+ RBLs (based on rblmon.com)
+- ✅ Monitor up to 1000 IPs per account
+- ✅ Check against 27 reliable RBLs
 - ✅ Automatic rate limiting
 - ✅ Daily or weekly email reports
 - ✅ Reports show only blacklisted IPs

@@ -27,13 +27,13 @@ $blacklistedIPs = $reportGen->getBlacklistedIPs($userId, $startDate . ' 00:00:00
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RBL Monitor - Report</title>
+    <title>RBL Watcher - Report</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>RBL Monitor - Report</h1>
+            <h1>RBL Watcher - Report</h1>
             <a href="index.php" class="btn btn-secondary">Back to Dashboard</a>
         </header>
         

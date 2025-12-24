@@ -57,7 +57,7 @@ class ReportGenerator {
             return "<p>No blacklisted IPs found for the selected period.</p>";
         }
         
-        $html = "<h2>RBL Monitor Report</h2>";
+        $html = "<h2>RBL Watcher Report</h2>";
         $html .= "<p>Report generated: " . date('Y-m-d H:i:s') . "</p>";
         $html .= "<p>Total blacklisted IPs: " . count($blacklistedIPs) . "</p>";
         $html .= "<table border='1' cellpadding='5' cellspacing='0' style='border-collapse: collapse; width: 100%;'>";
@@ -124,7 +124,7 @@ class ReportGenerator {
         }
         
         $html = $this->generateHTMLReport($userId, $startDate, $endDate);
-        $subject = "RBL Monitor " . ucfirst($reportType) . " Report - " . date('Y-m-d');
+        $subject = "RBL Watcher " . ucfirst($reportType) . " Report - " . date('Y-m-d');
         
         // Simple email sending (you may want to use PHPMailer or similar)
         $headers = "MIME-Version: 1.0\r\n";

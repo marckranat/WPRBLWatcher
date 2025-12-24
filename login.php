@@ -42,13 +42,13 @@ if ($auth->isLoggedIn()) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RBL Monitor - Login</title>
+    <title>RBL Watcher - Login</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <div class="login-box">
-            <h1>RBL Monitor</h1>
+            <h1>RBL Watcher</h1>
             
             <?php if ($error): ?>
                 <div class="alert <?php echo strpos($error, 'successful') !== false ? 'alert-success' : 'alert-error'; ?>">
